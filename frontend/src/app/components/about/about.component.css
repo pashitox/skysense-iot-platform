@@ -1,0 +1,268 @@
+.about-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.about-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.about-header h1 {
+  color: #3b82f6;
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+}
+
+.about-header p {
+  color: #6b7280;
+  font-size: 1.1rem;
+}
+
+.info-card {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f3f4f6;
+}
+
+.card-header h2 {
+  color: #1f2937;
+  font-size: 1.8rem;
+  margin: 0;
+}
+
+.version-badge {
+  background: #10b981;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.description {
+  color: #4b5563;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 25px;
+}
+
+/* Sección del contador */
+.counter-section {
+  background: #f0f9ff;
+  padding: 20px;
+  border-radius: 12px;
+  margin: 25px 0;
+  border-left: 4px solid #3b82f6;
+}
+
+.counter-section h3 {
+  color: #1e40af;
+  margin-bottom: 15px;
+}
+
+.counter-display {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.counter-value {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #3b82f6;
+  display: block;
+}
+
+.counter-label {
+  color: #6b7280;
+  font-size: 1rem;
+}
+
+.counter-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Lista de características */
+.features-section {
+  margin: 25px 0;
+}
+
+.features-section h3 {
+  color: #1f2937;
+  margin-bottom: 15px;
+}
+
+.features-list {
+  list-style: none;
+  padding: 0;
+}
+
+.features-list li {
+  padding: 8px 0;
+  color: #4b5563;
+  font-size: 1rem;
+}
+
+/* Sección de tecnologías */
+.tech-section {
+  margin: 25px 0;
+}
+
+.tech-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tech-header h3 {
+  color: #1f2937;
+  margin: 0;
+}
+
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.tech-item {
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 10px 15px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 500;
+  border: 1px solid #c7d2fe;
+}
+
+/* Información del desarrollador */
+.developer-info {
+  margin: 25px 0;
+}
+
+.developer-info h3 {
+  color: #1f2937;
+  margin-bottom: 15px;
+}
+
+.dev-card {
+  background: #f0fdf4;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #bbf7d0;
+}
+
+.dev-card p {
+  margin: 8px 0;
+  color: #166534;
+}
+
+.status-active {
+  color: #059669;
+  font-weight: 600;
+}
+
+/* Botones */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #4b5563;
+  transform: translateY(-2px);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 2px solid #d1d5db;
+  color: #6b7280;
+}
+
+.btn-outline:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+/* Navegación */
+.navigation {
+  text-align: center;
+  margin-top: 30px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .about-container {
+    padding: 15px;
+  }
+  
+  .about-header h1 {
+    font-size: 2rem;
+  }
+  
+  .info-card {
+    padding: 20px;
+  }
+  
+  .card-header {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+  
+  .tech-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .counter-buttons {
+    flex-direction: column;
+  }
+  
+  .btn {
+    width: 100%;
+  }
+}

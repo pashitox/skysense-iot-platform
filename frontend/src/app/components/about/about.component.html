@@ -1,0 +1,79 @@
+<div class="about-container">
+  <!-- Header del componente -->
+  <header class="about-header">
+    <h1>ℹ️ Acerca de SkySense</h1>
+    <p>Información sobre el proyecto y funcionalidades</p>
+  </header>
+
+  <!-- Tarjeta de información principal -->
+  <div class="info-card">
+    <div class="card-header">
+      <h2>{{ projectInfo.name }}</h2>
+      <span class="version-badge">v{{ projectInfo.version }}</span>
+    </div>
+    
+    <p class="description">{{ projectInfo.description }}</p>
+
+    <!-- Contador de visitas (práctica básica) -->
+    <div class="counter-section">
+      <h3>🔢 Contador de Visitas</h3>
+      <div class="counter-display">
+        <span class="counter-value">{{ visitCount }}</span>
+        <span class="counter-label">visitas</span>
+      </div>
+      <div class="counter-buttons">
+        <button (click)="incrementCounter()" class="btn btn-primary">
+          ➕ Incrementar
+        </button>
+        <button (click)="resetCounter()" class="btn btn-secondary">
+          🔄 Reiniciar
+        </button>
+      </div>
+    </div>
+
+    <!-- Características del proyecto -->
+    <div class="features-section">
+      <h3>⭐ Características Principales</h3>
+      <ul class="features-list">
+        <li *ngFor="let feature of projectInfo.features">
+          ✅ {{ feature }}
+        </li>
+      </ul>
+    </div>
+
+    <!-- Tecnologías (con toggle) -->
+    <div class="tech-section">
+      <div class="tech-header">
+        <h3>🛠️ Tecnologías Utilizadas</h3>
+        <button (click)="toggleTechDetails()" class="btn btn-outline">
+          {{ showTechDetails ? '👆 Ocultar' : '👇 Mostrar' }} Detalles
+        </button>
+      </div>
+      
+      <div *ngIf="showTechDetails" class="tech-details">
+        <div class="tech-grid">
+          <div *ngFor="let tech of projectInfo.technologies" class="tech-item">
+            {{ tech }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Información del desarrollador -->
+    <div class="developer-info">
+      <h3>👨‍💻 Información del Desarrollo</h3>
+      <div class="dev-card">
+        <p><strong>Estado:</strong> <span class="status-active">🟢 En desarrollo</span></p>
+        <p><strong>Propósito:</strong> Aprendizaje y práctica de Angular</p>
+        <p><strong>Componente:</strong> About - Práctica básica</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navegación simple -->
+  <div class="navigation">
+    <button (click)="navigateToDashboard()" class="btn btn-primary">
+      📊 Ir al Dashboard
+    </button>
+  </div>
+</div>

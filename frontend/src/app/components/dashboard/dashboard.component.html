@@ -1,0 +1,201 @@
+<div class="dashboard-container">
+  <!-- ========================= HEADER ========================= -->
+  <header class="dashboard-header">
+    <div class="header-content">
+
+      <!-- === TITLE SECTION === -->
+      <div class="title-section">
+        <h1 class="dashboard-title">
+          <span class="title-icon">🌤</span>
+          SkySense IoT Dashboard
+        </h1>
+        <p class="dashboard-subtitle">Monitoreo en Tiempo Real de Sensores</p>
+      </div>
+
+      <!-- === NAVIGATION BUTTONS === -->
+      <div class="navigation-buttons">
+
+        <!-- NUEVO BOTÓN con función navigateToAbout() -->
+        <button (click)="navigateToAbout()" class="btn btn-outline">
+          🔗 Ir a Acerca de Proyecto
+        </button>
+      </div>
+
+      <!-- === STATUS & CONTROLS === -->
+      <div class="controls-section">
+        <!-- Estado de conexión -->
+        <div class="connection-status">
+          <div class="status-indicator" [style.background-color]="getConnectionColor()"></div>
+          <span class="status-text">{{ connectionStatusText }}</span>
+        </div>
+
+        <!-- Botones de control -->
+        <div class="control-buttons">
+          <button
+            *ngIf="connectionStatus !== 'connected' && connectionStatus !== 'simulation'"
+            (click)="reconnect()"
+            class="btn btn-secondary"
+            [disabled]="connectionStatus === 'connecting'">
+            <span class="btn-icon">🔄</span>
+            {{ connectionStatus === 'connecting' ? 'Conectando...' : 'Reconectar' }}
+          </button>
+
+          <button
+            (click)="toggleSimulation()"
+            class="btn"
+            [class.btn-simulation]="!isSimulation"
+            [class.btn-danger]="isSimulation">
+            <span class="btn-icon">{{ isSimulation ? '🛑' : '🎭' }}</span>
+            {{ isSimulation ? 'Detener Simulación' : 'Modo Simulación' }}
+          </button>
+
+          <button (click)="clearData()" class="btn btn-outline">
+            <span class="btn-icon">🗑️</span>
+            Limpiar Datos
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ========================= STATISTICS ========================= -->
+  <section class="stats-section" *ngIf="sensors.length > 0">
+    <h2 class="section-title">📊 Estadísticas en Tiempo Real</h2>
+
+    <div class="stats-grid">
+      <!-- Temperatura -->
+      <div class="stat-card">
+        <div class="stat-icon">🌡️</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ stats.avgTemperature }}°C</h3>
+          <p class="stat-label">Temp. Promedio</p>
+          <div class="stat-range">
+            <span class="min-temp">{{ stats.minTemperature }}°C</span>
+            <span class="max-temp">{{ stats.maxTemperature }}°C</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Humedad -->
+      <div class="stat-card">
+        <div class="stat-icon">💧</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ stats.avgHumidity }}%</h3>
+          <p class="stat-label">Humedad Promedio</p>
+          <div class="stat-subtext">Rango: 40-75%</div>
+        </div>
+      </div>
+
+      <!-- Presión -->
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ stats.avgPressure }} hPa</h3>
+          <p class="stat-label">Presión Promedio</p>
+          <div class="stat-subtext">Nivel del mar</div>
+        </div>
+      </div>
+
+      <!-- Total de lecturas -->
+      <div class="stat-card">
+        <div class="stat-icon">📈</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ stats.totalReadings }}</h3>
+          <p class="stat-label">Total de Lecturas</p>
+          <div class="stat-subtext">{{ stats.activeSensors }} sensores activos</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fuente de datos -->
+    <div class="data-source-info">
+      <span
+        class="source-badge"
+        [class.real-badge]="!isSimulation"
+        [class.sim-badge]="isSimulation">
+        {{ stats.dataSource }}
+      </span>
+      <span class="update-time">
+        Última actualización: {{ stats.lastUpdate }}
+      </span>
+    </div>
+  </section>
+
+  <!-- ========================= SENSORS GRID ========================= -->
+  <section class="sensors-section" *ngIf="sensors.length > 0">
+    <div class="section-header">
+      <h2 class="section-title">🎯 Sensores en Tiempo Real</h2>
+      <div class="sensors-count">
+        <span class="count-badge">{{ sensors.length }} lecturas</span>
+      </div>
+    </div>
+
+    <div class="sensors-grid">
+      <div
+        *ngFor="let sensor of sensors; trackBy: trackBySensorId"
+        class="sensor-card"
+        [class.new-reading]="isNewSensor(sensor)"
+        [class.real-data]="!isSimulation">
+
+        <!-- Cabecera del sensor -->
+        <div class="sensor-header">
+          <h3 class="sensor-id">{{ sensor.sensor_id | uppercase }}</h3>
+          <div class="sensor-badges">
+            <span *ngIf="!isSimulation" class="data-badge real">REAL</span>
+            <span *ngIf="isNewSensor(sensor)" class="data-badge new">NUEVO</span>
+          </div>
+        </div>
+
+        <!-- Datos -->
+        <div class="sensor-data">
+          <div class="data-item">
+            <span class="data-icon">🌡️</span>
+            <div class="data-content">
+              <span class="data-value" [style.color]="getTemperatureColor(sensor.temperature)">
+                {{ sensor.temperature | number:'1.1-1' }}°C
+              </span>
+              <span class="data-label">Temperatura</span>
+            </div>
+          </div>
+
+          <div class="data-item">
+            <span class="data-icon">💧</span>
+            <div class="data-content">
+              <span class="data-value" [style.color]="getHumidityColor(sensor.humidity)">
+                {{ sensor.humidity | number:'1.1-1' }}%
+              </span>
+              <span class="data-label">Humedad</span>
+            </div>
+          </div>
+
+          <div class="data-item">
+            <span class="data-icon">📊</span>
+            <div class="data-content">
+              <span class="data-value">{{ sensor.pressure | number:'1.1-1' }} hPa</span>
+              <span class="data-label">Presión Atmosférica</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pie de tarjeta -->
+        <div class="sensor-footer">
+          <small class="timestamp">{{ sensor.timestamp | date:'mediumTime' }}</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= EMPTY STATE ========================= -->
+  <section *ngIf="sensors.length === 0" class="empty-state">
+    <div class="empty-content">
+      <div class="empty-icon">📡</div>
+      <h2>Esperando datos de sensores</h2>
+      <p>Los datos de los sensores aparecerán aquí en tiempo real</p>
+
+      <div class="empty-hint" *ngIf="!isSimulation">
+        💡 Asegúrate de que el backend esté ejecutándose en el puerto 8000
+      </div>
+    </div>
+  </section>
+</div>
