@@ -1,0 +1,236 @@
+# SkySense IoT Platform - Git Ignore File
+# ========================================
+
+# 🔧 Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.pnpm-store/
+
+# 🐍 Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 🐳 Docker
+docker-compose.override.yml
+.dockerignore
+
+# 🔐 Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 📊 Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# 🏗️ Build outputs
+dist/
+build/
+.angular/
+.cache/
+
+# 🗄️ Database
+*.db
+*.sqlite
+*.sqlite3
+
+# 🔧 IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 🐛 Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# 📦 Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# 📱 nyc test coverage
+.nyc_output
+
+# 🛠️ Grunt intermediate storage
+.grunt
+
+# 🔍 Bower dependency directory
+bower_components
+
+# 🗂️ node-waf configuration
+.lock-wscript
+
+# 📚 Compiled binary addons
+build/Release
+
+# 🔗 Dependency directories
+jspm_packages/
+
+# 📐 TypeScript cache
+*.tsbuildinfo
+
+# 🎯 Optional npm cache directory
+.npm
+
+# 🏃 Optional eslint cache
+.eslintcache
+
+# 🗄️ Optional stylelint cache
+.stylelintcache
+
+# 🔒 Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# 🛠️ Optional REPL history
+.node_repl_history
+
+# 📊 Output of 'npm pack'
+*.tgz
+
+# 🎯 Yarn Integrity file
+.yarn-integrity
+
+# 🗂️ parcel-bundler cache
+.cache
+.parcel-cache
+
+# 🔧 Next.js build output
+.next
+
+# 🛠️ Nuxt.js build / generate output
+.nuxt
+dist
+
+# 🎯 Storybook build outputs
+.out
+.storybook-out
+
+# 🏗️ Gatsby files
+.cache/
+# Comment in the public line in if your project uses Gatsby and not Next.js
+# public
+
+# 🗂️ vuepress build output
+.vuepress/dist
+
+# 🔨 Serverless directories
+.serverless/
+
+# 🔧 FuseBox cache
+.fusebox/
+
+# 🐳 DynamoDB Local files
+.dynamodb/
+
+# 🛠️ TernJS port file
+.tern-port
+
+# 📦 Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# 🐳 Kubernetes files (optional - remove if you want to track k8s configs)
+k8s/
+*.kubeconfig
+
+# 🗄️ Minikube and local cluster files
+.minikube/
+
+# 🔧 Temporary folders
+tmp/
+temp/
+
+# 📊 MacOS
+.DS_Store
+
+# 🔒 Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 🔧 Linux
+*~
+
+# 🎯 Backup files
+*.backup
+*.bak
+
+# 📝 Documentation
+*.doc
+*.docx
+*.pdf
+
+# 🖼️ Images (uncomment if you have large image assets)
+# *.jpg
+# *.jpeg
+# *.png
+# *.gif
+# *.bmp
+# *.tiff
+
+# 📦 Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# 🎵 Media files
+*.mp3
+*.mp4
+*.avi
+*.mov
+
+# 🔧 Local development overrides
+docker-compose.override.yml
+k8s/overlays/
+
+# 🐳 Docker build cache
+.docker/
+
+# 🔐 Kubernetes secrets (never commit these!)
+*-secret.yaml
+*-credentials.yaml
+
+# 📊 Local development databases
+data/
+*.db-journal
