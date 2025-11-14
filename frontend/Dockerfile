@@ -1,17 +1,29 @@
-FROM node:18 as build
+# Build stage
+FROM node:18 as build-stage
+
 WORKDIR /app
+
+# Copy package files
 COPY package*.json ./
 RUN npm install
+
+# Copy source code
 COPY . .
-RUN npm run build
 
-FROM node:18-alpine
-WORKDIR /app
-COPY --from=build /app/dist/skysense-dashboard ./dist/skysense-dashboard
-COPY --from=build /app/server.js ./
-COPY --from=build /app/package.json ./
+# Build the application
+RUN npm run build -- --configuration=production
 
-RUN npm install express
+# Production stage
+FROM nginx:alpine
 
+# Copy built app - CORREGIDO: usar la ruta correcta
+COPY --from=build-stage /app/dist/ /usr/share/nginx/html
+
+# Copy nginx config
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Expose port
 EXPOSE 80
-CMD ["node", "server.js"]
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

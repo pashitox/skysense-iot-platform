@@ -1,5 +1,5 @@
 export const environment = {
-  production: false,
-  apiUrl: 'http://localhost:8000',
-  wsUrl: 'ws://localhost:8000'
+  production: true,
+  apiUrl: 'http://backend-service.skysense.svc.cluster.local:8000',
+  wsUrl: 'ws://backend-service.skysense.svc.cluster.local:8000'
 };
