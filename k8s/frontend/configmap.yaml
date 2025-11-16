@@ -4,7 +4,6 @@ metadata:
   name: frontend-config
   namespace: skysense
 data:
-  APP_NAME: "SkySense Frontend"
-  APP_VERSION: "1.0.0"
-  API_URL: "http://backend-service.skysense.svc.cluster.local:8000"
-  WS_URL: "ws://backend-service.skysense.svc.cluster.local:8000"
+  APP_NAME: "SkySense IoT Platform"
+  API_URL: "http://192.168.49.2:32180/api"
+  WS_URL: "ws://192.168.49.2:32180/ws"

@@ -4,6 +4,5 @@ metadata:
   name: backend-config
   namespace: skysense
 data:
-  APP_NAME: "SkySense Backend"
-  APP_VERSION: "1.0.0"
-  LOG_LEVEL: "INFO"
+  DATABASE_URL: "postgresql://skysense_user:skysense_password@postgresql:5432/skysense_db"
+  PYTHONPATH: "/app"

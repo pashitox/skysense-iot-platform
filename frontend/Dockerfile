@@ -10,14 +10,14 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the application - CORREGIDO: usar la ruta correcta del output
 RUN npm run build -- --configuration=production
 
 # Production stage
 FROM nginx:alpine
 
-# Copy built app - CORREGIDO: usar la ruta correcta
-COPY --from=build-stage /app/dist/ /usr/share/nginx/html
+# Copy built app - CORREGIDO: usar la ruta correcta según angular.json
+COPY --from=build-stage /app/dist/skysense-dashboard/ /usr/share/nginx/html
 
 # Copy nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
