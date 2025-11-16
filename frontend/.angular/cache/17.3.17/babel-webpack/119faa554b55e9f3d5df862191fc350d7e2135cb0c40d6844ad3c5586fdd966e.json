@@ -1,0 +1,1 @@
+{"ast":null,"code":"export const environment = {\n  production: true,\n  apiUrl: '/api',\n  wsUrl: 'ws://backend-service.skysense.svc.cluster.local:8000/ws/sensors'\n};","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}

@@ -50,7 +50,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.subscription.add(
       this.websocketService.sensors$.subscribe({
         next: (data) => {
+          if (data) {
           this.handleNewSensorData(data);
+                  }
           this.updateStats();
         },
         error: (error) => {
@@ -131,11 +133,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   reconnect() {
     console.log('🔄 Reconexión manual solicitada');
     this.websocketService.disconnect();
-    setTimeout(() => this.websocketService.connect(), 1000);
+    setTimeout(() => this.websocketService.reconnect(), 1000);
   }
 
   toggleSimulation() {
-    this.websocketService.toggleSimulationMode();
+    //this.websocketService.toggleSimulationMode();
   }
 
   clearData(): void {

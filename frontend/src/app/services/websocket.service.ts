@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, Subject, BehaviorSubject } from 'rxjs';
-import { environment } from '../../environments/environment';
+import { Observable, BehaviorSubject } from 'rxjs';
 
 export interface SensorData {
   sensor_id: string;
@@ -14,7 +13,7 @@ export interface SensorData {
   providedIn: 'root'
 })
 export class WebsocketService {
-  private sensorsSubject = new Subject<SensorData>();
+  private sensorsSubject = new BehaviorSubject<SensorData | null>(null);
   public sensors$ = this.sensorsSubject.asObservable();
   
   private connectionStatus = new BehaviorSubject<string>('disconnected');
@@ -23,27 +22,28 @@ export class WebsocketService {
   private ws: WebSocket | null = null;
   private simulationMode = false;
   private simulationInterval: any = null;
-  private reconnectTimeout: any = null;
 
   constructor() {
-    console.log('🔧 WebSocket Configuration:');
-    console.log('   - Environment:', environment.production ? 'production' : 'development');
-    console.log('   - WebSocket URL:', environment.wsUrl);
-    
+    console.log('🚀 WebSocket Service - KUBERNETES FIXED V2');
+    console.log('   - Using Kubernetes service URL');
     this.connectToBackend();
   }
 
-  private connectToBackend(): void {
+  connectToBackend() {
     try {
-      console.log('🔄 Connecting to backend...');
-      console.log('   - Target URL:', environment.wsUrl);
-      this.connectionStatus.next('connecting');
+      // ✅ URL ABSOLUTAMENTE CORRECTA para Kubernetes
+      const wsUrl = 'ws://backend-service.skysense.svc.cluster.local:8000/ws/sensors';
       
-      // Usar EXCLUSIVAMENTE la URL del environment
-      this.ws = new WebSocket(environment.wsUrl);
+      console.log('🔄 CONNECTING to Kubernetes WebSocket...');
+      console.log('   - Target URL:', wsUrl);
+      console.log('   - Browser location:', window.location.href);
+      
+      this.connectionStatus.next('connecting');
+      this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('✅ CONNECTED to backend WebSocket');
+        console.log('✅ ✅ ✅ SUCCESS! Connected to Kubernetes WebSocket');
+        console.log('   - Backend service is reachable');
         this.connectionStatus.next('connected');
         this.simulationMode = false;
         if (this.simulationInterval) {
@@ -54,72 +54,80 @@ export class WebsocketService {
 
       this.ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
-          console.log('📊 Received real sensor data:', data.sensor_id);
+          const data: SensorData = JSON.parse(event.data);
+          console.log('📊 REAL DATA from backend:', {
+            sensor: data.sensor_id,
+            temperature: data.temperature + '°C',
+            humidity: data.humidity + '%',
+            pressure: data.pressure + ' hPa'
+          });
           this.sensorsSubject.next(data);
         } catch (error) {
-          console.error('❌ Error parsing WebSocket message:', error);
+          console.error('❌ Error parsing message:', error);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
+        console.error('❌ WebSocket ERROR - Cannot reach backend in Kubernetes');
+        console.error('   - URL attempted:', wsUrl);
+        console.error('   - This means:');
+        console.error('     1. Backend service is not running');
+        console.error('     2. Network connectivity issue');
+        console.error('     3. Backend not exposing WebSocket port');
         this.connectionStatus.next('error');
         this.startSimulation();
       };
 
       this.ws.onclose = (event) => {
-        console.log('🔌 WebSocket closed');
+        console.log('🔌 WebSocket connection closed');
+        console.log('   - Code:', event.code, 'Reason:', event.reason);
         this.connectionStatus.next('disconnected');
-        
-        // Intentar reconectar después de 5 segundos
         if (!this.simulationMode) {
-          console.log('🔄 Will attempt reconnect in 5 seconds...');
-          this.reconnectTimeout = setTimeout(() => {
-            this.connectToBackend();
-          }, 5000);
+          console.log('🔄 Will retry in 5 seconds...');
+          setTimeout(() => this.connectToBackend(), 5000);
         }
       };
 
     } catch (error) {
-      console.error('❌ Failed to create WebSocket:', error);
+      console.error('❌ CRITICAL: Failed to create WebSocket:', error);
       this.connectionStatus.next('error');
       this.startSimulation();
     }
   }
 
-  private startSimulation(): void {
-    if (this.simulationMode) return;
-    
-    console.log('🎭 Backend not available - Starting simulation');
-    this.simulationMode = true;
-    this.connectionStatus.next('simulation');
-    
-    this.simulationInterval = setInterval(() => {
-      const simulatedData: SensorData = {
-        sensor_id: 'simulated_' + Math.floor(Math.random() * 5),
-        temperature: 20 + Math.random() * 15,
-        humidity: 40 + Math.random() * 40,
-        pressure: 990 + Math.random() * 40,
-        timestamp: new Date().toISOString()
-      };
-      console.log('🎭 SIMULATED data:', simulatedData);
-      this.sensorsSubject.next(simulatedData);
-    }, 2000);
+  startSimulation() {
+    if (!this.simulationMode) {
+      console.log('🎭 STARTING SIMULATION MODE');
+      console.log('   - Backend WebSocket is not available');
+      this.simulationMode = true;
+      this.connectionStatus.next('simulation');
+      
+      this.simulationInterval = setInterval(() => {
+        const simulatedData: SensorData = {
+          sensor_id: 'simulated_' + Math.floor(5 * Math.random()),
+          temperature: parseFloat((20 + 15 * Math.random()).toFixed(1)),
+          humidity: parseFloat((40 + 40 * Math.random()).toFixed(1)),
+          pressure: parseFloat((990 + 40 * Math.random()).toFixed(1)),
+          timestamp: new Date().toISOString()
+        };
+        console.log('🎭 SIMULATED data (fallback):', {
+          sensor: simulatedData.sensor_id,
+          temp: simulatedData.temperature + '°C'
+        });
+        this.sensorsSubject.next(simulatedData);
+      }, 2000);
+    }
   }
 
-  // Métodos públicos que el dashboard espera
-  public isSimulationMode(): boolean {
+  isSimulationMode(): boolean {
     return this.simulationMode;
   }
 
-  public disconnect(): void {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
+  disconnect() {
     if (this.simulationInterval) {
       clearInterval(this.simulationInterval);
       this.simulationMode = false;
+      this.simulationInterval = null;
     }
     if (this.ws) {
       this.ws.close();
@@ -127,26 +135,9 @@ export class WebsocketService {
     }
   }
 
-  public connect(): void {
+  reconnect() {
+    console.log('🔄 Manual reconnect requested');
     this.disconnect();
     this.connectToBackend();
-  }
-
-  public toggleSimulationMode(): void {
-    if (this.simulationMode) {
-      this.disconnect();
-      this.connectToBackend();
-    } else {
-      this.disconnect();
-      this.startSimulation();
-    }
-  }
-
-  public reconnect(): void {
-    this.connect();
-  }
-
-  public close(): void {
-    this.disconnect();
   }
 }
