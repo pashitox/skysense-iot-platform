@@ -1,3 +1,4 @@
+# k8s/postgresql.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,6 +26,14 @@ spec:
           value: "user"
         - name: POSTGRES_PASSWORD
           value: "password"
+        # ✅ CONFIGURACIÓN CRÍTICA: Inicialización automática
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-script
+          mountPath: /docker-entrypoint-initdb.d
         resources:
           requests:
             memory: "256Mi"
@@ -32,6 +41,35 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "200m"
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "user", "-d", "skysense"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "user", "-d", "skysense"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: postgresql-data
+        persistentVolumeClaim:
+          claimName: postgresql-pvc
+      - name: init-script
+        configMap:
+          name: postgresql-init-script
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-pvc
+  namespace: skysense
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service

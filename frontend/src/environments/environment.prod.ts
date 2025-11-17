@@ -1,5 +1,6 @@
 export const environment = {
   production: true,
-  apiUrl: '/api',
-  wsUrl: 'ws://backend-service.skysense.svc.cluster.local:8000/ws/sensors'
+  apiUrl: 'http://192.168.49.2:30080/api',
+  wsUrl: 'ws://192.168.49.2:30080/ws/sensors',
+  appName: 'SkySense IoT Dashboard'
 };

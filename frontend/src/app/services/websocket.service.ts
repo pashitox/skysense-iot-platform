@@ -23,29 +23,32 @@ export class WebsocketService {
   private simulationMode = false;
   private simulationInterval: any = null;
 
+  // ✅ URL CORRECTA - Usar la IP de Minikube y puerto NodePort
+  private readonly WS_URL = 'ws://192.168.49.2:30080/ws/sensors';
+  private readonly MAX_RETRIES = 3;
+  private retryCount = 0;
+
   constructor() {
-    console.log('🚀 WebSocket Service - KUBERNETES FIXED V2');
-    console.log('   - Using Kubernetes service URL');
+    console.log('🔧 WebSocket Service - FIXED VERSION');
+    console.log('   - Using DIRECT Minikube IP');
+    console.log('   - Target URL:', this.WS_URL);
     this.connectToBackend();
   }
 
   connectToBackend() {
     try {
-      // ✅ URL ABSOLUTAMENTE CORRECTA para Kubernetes
-      const wsUrl = 'ws://backend-service.skysense.svc.cluster.local:8000/ws/sensors';
-      
-      console.log('🔄 CONNECTING to Kubernetes WebSocket...');
-      console.log('   - Target URL:', wsUrl);
-      console.log('   - Browser location:', window.location.href);
+      console.log('🔄 CONNECTING to WebSocket...');
+      console.log('   - URL:', this.WS_URL);
       
       this.connectionStatus.next('connecting');
-      this.ws = new WebSocket(wsUrl);
+      this.ws = new WebSocket(this.WS_URL);
 
       this.ws.onopen = () => {
-        console.log('✅ ✅ ✅ SUCCESS! Connected to Kubernetes WebSocket');
-        console.log('   - Backend service is reachable');
+        console.log('✅ ✅ ✅ CONNECTED to WebSocket!');
         this.connectionStatus.next('connected');
         this.simulationMode = false;
+        this.retryCount = 0; // Reset retry counter
+        
         if (this.simulationInterval) {
           clearInterval(this.simulationInterval);
           this.simulationInterval = null;
@@ -55,12 +58,7 @@ export class WebsocketService {
       this.ws.onmessage = (event) => {
         try {
           const data: SensorData = JSON.parse(event.data);
-          console.log('📊 REAL DATA from backend:', {
-            sensor: data.sensor_id,
-            temperature: data.temperature + '°C',
-            humidity: data.humidity + '%',
-            pressure: data.pressure + ' hPa'
-          });
+          console.log('📊 REAL sensor data:', data.sensor_id);
           this.sensorsSubject.next(data);
         } catch (error) {
           console.error('❌ Error parsing message:', error);
@@ -68,28 +66,33 @@ export class WebsocketService {
       };
 
       this.ws.onerror = (error) => {
-        console.error('❌ WebSocket ERROR - Cannot reach backend in Kubernetes');
-        console.error('   - URL attempted:', wsUrl);
-        console.error('   - This means:');
-        console.error('     1. Backend service is not running');
-        console.error('     2. Network connectivity issue');
-        console.error('     3. Backend not exposing WebSocket port');
+        console.error('❌ WebSocket connection error');
         this.connectionStatus.next('error');
-        this.startSimulation();
+        
+        // Intentar reconexión automática
+        if (this.retryCount < this.MAX_RETRIES) {
+          this.retryCount++;
+          console.log(`🔄 Retry ${this.retryCount}/${this.MAX_RETRIES} in 3s...`);
+          setTimeout(() => this.connectToBackend(), 3000);
+        } else {
+          this.startSimulation();
+        }
       };
 
       this.ws.onclose = (event) => {
-        console.log('🔌 WebSocket connection closed');
-        console.log('   - Code:', event.code, 'Reason:', event.reason);
+        console.log('🔌 WebSocket closed');
         this.connectionStatus.next('disconnected');
-        if (!this.simulationMode) {
-          console.log('🔄 Will retry in 5 seconds...');
-          setTimeout(() => this.connectToBackend(), 5000);
+        
+        // Reconexión automática solo si no fue un cierre intencional
+        if (event.code !== 1000 && this.retryCount < this.MAX_RETRIES) {
+          this.retryCount++;
+          console.log(`🔄 Auto-reconnect ${this.retryCount}/${this.MAX_RETRIES}`);
+          setTimeout(() => this.connectToBackend(), 2000);
         }
       };
 
     } catch (error) {
-      console.error('❌ CRITICAL: Failed to create WebSocket:', error);
+      console.error('❌ Failed to create WebSocket:', error);
       this.connectionStatus.next('error');
       this.startSimulation();
     }
@@ -97,8 +100,7 @@ export class WebsocketService {
 
   startSimulation() {
     if (!this.simulationMode) {
-      console.log('🎭 STARTING SIMULATION MODE');
-      console.log('   - Backend WebSocket is not available');
+      console.log('🎭 Starting simulation mode');
       this.simulationMode = true;
       this.connectionStatus.next('simulation');
       
@@ -110,10 +112,7 @@ export class WebsocketService {
           pressure: parseFloat((990 + 40 * Math.random()).toFixed(1)),
           timestamp: new Date().toISOString()
         };
-        console.log('🎭 SIMULATED data (fallback):', {
-          sensor: simulatedData.sensor_id,
-          temp: simulatedData.temperature + '°C'
-        });
+        console.log('🎭 SIMULATED data:', simulatedData.sensor_id);
         this.sensorsSubject.next(simulatedData);
       }, 2000);
     }
@@ -130,14 +129,15 @@ export class WebsocketService {
       this.simulationInterval = null;
     }
     if (this.ws) {
-      this.ws.close();
+      this.ws.close(1000, 'Manual disconnect');
       this.ws = null;
     }
   }
 
   reconnect() {
     console.log('🔄 Manual reconnect requested');
+    this.retryCount = 0;
     this.disconnect();
-    this.connectToBackend();
+    setTimeout(() => this.connectToBackend(), 1000);
   }
 }
