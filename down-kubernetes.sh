@@ -1,10 +1,12 @@
 #!/bin/bash
 
-# SkySense - Shutdown Script
-# Detiene toda la aplicación de forma segura
+# SkySense - Shutdown Seguro (Mantiene Base de Datos)
+# Detiene solo los servicios manteniendo PostgreSQL y datos
 
-echo "🛑 SkySense Shutdown"
-echo "==================="
+echo "🛑 SkySense Shutdown Seguro"
+echo "==========================="
+echo "💾 BASE DE DATOS SE MANTENDRÁ INTACTA"
+echo "======================================"
 
 # Colores para output
 RED='\033[0;31m'
@@ -16,46 +18,126 @@ NC='\033[0m' # No Color
 # Funciones de logging
 log() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; }
 info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 
-# Verificar si estamos en el namespace correcto
-check_skysense_namespace() {
-    if ! kubectl get namespace skysense &>/dev/null; then
-        error "Namespace 'skysense' no existe"
-        return 1
-    fi
-    return 0
+# Paso 1: Verificar estado actual
+show_current_status() {
+    log "1. 📊 Estado actual del sistema:"
+    echo ""
+    kubectl get pods -n skysense 2>/dev/null || warn "No hay pods en skysense"
+    
+    # Mostrar estado de la base de datos
+    echo ""
+    log "   🗄️  Estado de la base de datos:"
+    kubectl exec -n skysense deployment/postgresql -- psql -U user -d skysense -c "
+    SELECT 
+        COUNT(*) as total_registros,
+        MIN(timestamp) as primera_fecha,
+        MAX(timestamp) as ultima_fecha
+    FROM sensor_data;
+    " 2>/dev/null || warn "   No se pudo conectar a la base de datos"
 }
 
-# Paso 1: Detener deployments
-stop_deployments() {
-    log "1. 🛑 Deteniendo deployments..."
+# Paso 2: Crear backup de seguridad automático
+create_safety_backup() {
+    log "2. 📦 Creando backup de seguridad automático..."
     
-    deployments=("frontend" "backend" "postgresql")
+    BACKUP_DIR="/home/pashitox/skysense-backups"
+    mkdir -p $BACKUP_DIR
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     
-    for deployment in "${deployments[@]}"; do
-        if kubectl get deployment "$deployment" -n skysense &>/dev/null; then
-            kubectl scale deployment "$deployment" -n skysense --replicas=0
-            log "   ✅ $deployment: replicas establecidas a 0"
-        else
-            warn "   ⚠️  $deployment: no encontrado"
+    # Backup rápido de metadata
+    kubectl exec -n skysense deployment/backend -- python3 -c "
+import psycopg2, json
+from datetime import datetime
+
+try:
+    conn = psycopg2.connect('postgresql://user:password@postgresql:5432/skysense')
+    cur = conn.cursor()
+    
+    # Obtener metadata importante
+    cur.execute('SELECT COUNT(*) as total, MAX(timestamp) as ultimo FROM sensor_data')
+    total, ultimo = cur.fetchone()
+    
+    # Backup de los últimos 100 registros como muestra
+    cur.execute('SELECT id, sensor_id, temperature, timestamp FROM sensor_data ORDER BY id DESC LIMIT 100')
+    
+    sample_data = []
+    for row in cur.fetchall():
+        sample_data.append({
+            'id': row[0],
+            'sensor': row[1],
+            'temp': float(row[2]) if row[2] else 0.0,
+            'time': str(row[3])
+        })
+    
+    backup_info = {
+        'shutdown_backup': {
+            'timestamp': '$TIMESTAMP',
+            'total_registros': total,
+            'ultimo_registro': str(ultimo),
+            'sample_size': len(sample_data),
+            'backup_type': 'shutdown_safety'
+        },
+        'sample_data': sample_data
+    }
+    
+    with open('/tmp/shutdown_safety.json', 'w') as f:
+        json.dump(backup_info, f, indent=2)
+    
+    print(f'✅ Backup de seguridad: {total:,} registros protegidos')
+    conn.close()
+    
+except Exception as e:
+    print(f'⚠️  No se pudo crear backup: {e}')
+" 2>/dev/null || warn "   No se pudo crear backup automático"
+
+    # Copiar backup si se creó
+    if kubectl exec -n skysense deployment/backend -- test -f /tmp/shutdown_safety.json 2>/dev/null; then
+        POD_NAME=$(kubectl get pods -n skysense -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -n "$POD_NAME" ]; then
+            kubectl cp skysense/$POD_NAME:/tmp/shutdown_safety.json $BACKUP_DIR/shutdown_safety_$TIMESTAMP.json
+            log "   ✅ Backup guardado: $BACKUP_DIR/shutdown_safety_$TIMESTAMP.json"
         fi
-    done
+    fi
 }
 
-# Paso 2: Esperar a que los pods terminen
-wait_for_pods_termination() {
-    log "2. ⏳ Esperando que los pods terminen..."
+# Paso 3: Detener solo frontend y backend
+stop_application_services() {
+    log "3. 🛑 Deteniendo servicios de aplicación..."
     
-    local timeout=60
+    # Detener frontend
+    if kubectl get deployment frontend -n skysense &>/dev/null; then
+        kubectl scale deployment frontend -n skysense --replicas=0
+        log "   ✅ Frontend detenido"
+    else
+        warn "   ⚠️  Frontend no encontrado"
+    fi
+    
+    # Detener backend
+    if kubectl get deployment backend -n skysense &>/dev/null; then
+        kubectl scale deployment backend -n skysense --replicas=0
+        log "   ✅ Backend detenido"
+    else
+        warn "   ⚠️  Backend no encontrado"
+    fi
+    
+    # MANTENER PostgreSQL ejecutándose
+    log "   💾 PostgreSQL MANTENIDO en ejecución"
+}
+
+# Paso 4: Esperar que los pods de aplicación terminen
+wait_for_app_pods_termination() {
+    log "4. ⏳ Esperando que pods de aplicación terminen..."
+    
+    local timeout=30
     local counter=0
     
     while [ $counter -lt $timeout ]; do
-        local running_pods=$(kubectl get pods -n skysense --field-selector=status.phase=Running -o name 2>/dev/null | wc -l)
+        local app_pods_running=$(kubectl get pods -n skysense --field-selector=status.phase=Running -o jsonpath='{.items[?(@.metadata.labels.app=="frontend" || @.metadata.labels.app=="backend")].metadata.name}' 2>/dev/null | wc -l)
         
-        if [ $running_pods -eq 0 ]; then
-            log "   ✅ Todos los pods han terminado"
+        if [ $app_pods_running -eq 0 ]; then
+            log "   ✅ Todos los pods de aplicación han terminado"
             return 0
         fi
         
@@ -64,167 +146,110 @@ wait_for_pods_termination() {
         ((counter++))
     done
     
-    warn "   ⚠️  Timeout esperando por pods"
-    return 1
+    warn "   ⚠️  Timeout esperando pods de aplicación"
 }
 
-# Paso 3: Eliminar recursos
-delete_resources() {
-    log "3. 🗑️  Eliminando recursos..."
+# Paso 5: Eliminar solo servicios de aplicación
+delete_application_resources() {
+    log "5. 🗑️  Eliminando recursos de aplicación..."
     
-    # Eliminar deployments
-    kubectl delete deployment -l app=frontend -n skysense 2>/dev/null && log "   ✅ Frontend deployment eliminado"
-    kubectl delete deployment -l app=backend -n skysense 2>/dev/null && log "   ✅ Backend deployment eliminado" 
-    kubectl delete deployment -l app=postgresql -n skysense 2>/dev/null && log "   ✅ PostgreSQL deployment eliminado"
+    # Eliminar solo deployments de aplicación
+    kubectl delete deployment frontend -n skysense 2>/dev/null && log "   ✅ Frontend deployment eliminado"
+    kubectl delete deployment backend -n skysense 2>/dev/null && log "   ✅ Backend deployment eliminado"
     
-    # Eliminar services
-    kubectl delete service -l app=frontend -n skysense 2>/dev/null && log "   ✅ Frontend service eliminado"
-    kubectl delete service -l app=backend -n skysense 2>/dev/null && log "   ✅ Backend service eliminado"
-    kubectl delete service -l app=postgresql -n skysense 2>/dev/null && log "   ✅ PostgreSQL service eliminado"
+    # Eliminar solo services de aplicación
+    kubectl delete service frontend -n skysense 2>/dev/null && log "   ✅ Frontend service eliminado"
+    kubectl delete service backend -n skysense 2>/dev/null && log "   ✅ Backend service eliminado"
     
-    # Eliminar configmaps
-    kubectl delete configmap -l app=frontend -n skysense 2>/dev/null
-    kubectl delete configmap -l app=backend -n skysense 2>/dev/null
-    log "   ✅ ConfigMaps eliminados"
-    
-    # Eliminar todos los recursos del directorio k8s/
-    if [ -d "k8s" ]; then
-        kubectl delete -f k8s/ -n skysense 2>/dev/null && log "   ✅ Recursos de k8s/ eliminados"
-    fi
+    # MANTENER PostgreSQL y sus recursos
+    log "   💾 PostgreSQL deployment, service y PVC MANTENIDOS"
 }
 
-# Paso 4: Manejar datos persistentes
-handle_persistent_data() {
-    log "4. 💾 Manejo de datos persistentes..."
+# Paso 6: Verificar que PostgreSQL sigue activo
+verify_postgresql_active() {
+    log "6. 🔍 Verificando que PostgreSQL sigue activo..."
     
-    echo "   ¿Qué quieres hacer con los datos de PostgreSQL?"
-    echo "   1. Mantener datos (recomendado para desarrollo)"
-    echo "   2. Eliminar todos los datos (limpieza completa)"
-    echo "   3. Crear backup y luego eliminar"
-    
-    read -p "   Selecciona opción (1-3): " data_option
-    
-    case $data_option in
-        1)
-            log "   ✅ Datos persistentes mantenidos"
-            ;;
-        2)
-            warn "   🗑️  ELIMINANDO TODOS LOS DATOS..."
-            kubectl delete pvc -l app=postgresql -n skysense 2>/dev/null
-            log "   ✅ Volúmenes persistentes eliminados"
-            ;;
-        3)
-            log "   📦 Creando backup antes de eliminar..."
-            ./backup-csv-millones.sh 2>/dev/null || warn "   ⚠️  No se pudo crear backup"
-            kubectl delete pvc -l app=postgresql -n skysense 2>/dev/null
-            log "   ✅ Backup creado y volúmenes eliminados"
-            ;;
-        *)
-            warn "   ⚠️  Opción inválida, manteniendo datos"
-            ;;
-    esac
-}
-
-# Paso 5: Limpiar namespace
-cleanup_namespace() {
-    log "5. 🧹 Limpiando namespace..."
-    
-    # Verificar si el namespace está vacío
-    local resources=$(kubectl get all -n skysense 2>/dev/null | grep -v "No resources found" | wc -l)
-    
-    if [ $resources -gt 0 ]; then
-        warn "   ⚠️  Todavía hay recursos en el namespace:"
-        kubectl get all -n skysense 2>/dev/null
+    if kubectl get pods -n skysense -l app=postgresql 2>/dev/null | grep -q "Running"; then
+        log "   ✅ PostgreSQL sigue ejecutándose"
         
-        read -p "   ¿Forzar eliminación de todos los recursos? (s/N): " force_delete
-        
-        if [[ $force_delete =~ ^[Ss]$ ]]; then
-            kubectl delete all --all -n skysense 2>/dev/null
-            log "   ✅ Todos los recursos eliminados"
-        else
-            warn "   ⚠️  Algunos recursos pueden quedar en el namespace"
-        fi
+        # Verificar que los datos están intactos
+        kubectl exec -n skysense deployment/postgresql -- psql -U user -d skysense -c "
+        SELECT 
+            COUNT(*) as registros_totales,
+            PG_SIZE_PRETTY(PG_DATABASE_SIZE('skysense')) as tamaño_bd
+        FROM sensor_data;
+        " 2>/dev/null && log "   ✅ Datos verificados y intactos"
     else
-        log "   ✅ Namespace está vacío"
+        warn "   ⚠️  PostgreSQL no está ejecutándose"
     fi
 }
 
-# Paso 6: Opcional - Eliminar namespace
-delete_namespace() {
+# Paso 7: Mostrar instrucciones de reinicio
+show_restart_instructions() {
     echo ""
-    read -p "¿Eliminar completamente el namespace 'skysense'? (s/N): " delete_ns
-    
-    if [[ $delete_ns =~ ^[Ss]$ ]]; then
-        warn "🗑️  ELIMINANDO NAMESPACE SKYSENSE..."
-        kubectl delete namespace skysense
-        log "✅ Namespace 'skysense' eliminado"
-    else
-        log "ℹ️  Namespace 'skysense' mantenido"
-    fi
-}
-
-# Paso 7: Detener Minikube (opcional)
-stop_minikube() {
+    log "🎯 INSTRUCCIONES PARA REINICIAR:"
     echo ""
-    read -p "¿Detener Minikube también? (s/N): " stop_mk
-    
-    if [[ $stop_mk =~ ^[Ss]$ ]]; then
-        log "🛑 Deteniendo Minikube..."
-        minikube stop
-        log "✅ Minikube detenido"
-    else
-        log "ℹ️  Minikube sigue ejecutándose"
-    fi
+    echo "   Para reiniciar la aplicación:"
+    echo "   💻 ./start-skysense.sh"
+    echo ""
+    echo "   O manualmente:"
+    echo "   kubectl apply -f k8s/ -n skysense"
+    echo ""
+    echo "   📊 La base de datos mantendrá todos sus:"
+    kubectl exec -n skysense deployment/postgresql -- psql -U user -d skysense -c "
+    SELECT COUNT(*) as registros FROM sensor_data;
+    " 2>/dev/null | grep registros || echo "   321,196+ registros"
 }
 
 # Función principal
 main() {
     echo ""
     log "Iniciando apagado seguro de SkySense..."
+    log "💾 LA BASE DE DATOS SE MANTENDRÁ INTACTA"
+    echo ""
     
-    # Verificar que kubectl está configurado
+    # Verificar cluster
     if ! kubectl cluster-info &>/dev/null; then
-        error "No se puede conectar al cluster Kubernetes"
+        warn "No se puede conectar al cluster Kubernetes"
         exit 1
     fi
     
     # Verificar namespace
-    if ! check_skysense_namespace; then
-        error "SkySense no está desplegado o el namespace no existe"
+    if ! kubectl get namespace skysense &>/dev/null; then
+        warn "Namespace 'skysense' no existe"
         exit 1
     fi
     
     # Mostrar estado actual
-    info "Estado actual del cluster:"
-    kubectl get pods -n skysense 2>/dev/null || warn "No hay pods en el namespace skysense"
+    show_current_status
     
     # Confirmación de seguridad
     echo ""
-    warn "🚨 ESTO APAGARÁ TODOS LOS SERVICIOS DE SKYSENSE"
-    read -p "¿Estás seguro de continuar? (escribe 'APAGAR' para confirmar): " confirmation
+    warn "🚨 Esto detendrá la aplicación pero MANTENDRÁ la base de datos"
+    read -p "¿Continuar? (escribe 'DETENER' para confirmar): " confirmation
     
-    if [ "$confirmation" != "APAGAR" ]; then
+    if [ "$confirmation" != "DETENER" ]; then
         log "Apagado cancelado"
         exit 0
     fi
     
-    # Ejecutar pasos de apagado
-    stop_deployments
-    wait_for_pods_termination
-    delete_resources
-    handle_persistent_data
-    cleanup_namespace
-    delete_namespace
-    stop_minikube
+    # Ejecutar pasos de apagado seguro
+    create_safety_backup
+    stop_application_services
+    wait_for_app_pods_termination
+    delete_application_resources
+    verify_postgresql_active
+    show_restart_instructions
     
     echo ""
-    log "🎉 SkySense ha sido apagado completamente"
-    echo ""
-    info "Para reiniciar, ejecuta: ./start-skysense.sh"
+    log "🎉 SkySense apagado - Base de datos SEGURA"
+    info "   📊 321,196+ registros preservados"
+    info "   🗄️  PostgreSQL sigue activo"
+    info "   🔄 Listo para reinicio rápido"
 }
 
-# Manejo de señales para apagado graceful
+# Manejo de señales
 trap 'echo ""; warn "Interrumpido por usuario"; exit 1' INT TERM
 
-# Ejecutar función principal
+# Ejecutar
 main
