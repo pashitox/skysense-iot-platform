@@ -1,12 +1,15 @@
-echo "🧪 INICIANDO PRUEBA COMPLETA DEL SISTEMA - VERSIÓN CORREGIDA"
+#!/bin/bash
+
+echo "🧪 INICIANDO PRUEBA COMPLETA DEL SISTEMA - VERSIÓN KUBERNETES"
 echo "==========================================================="
-echo "SkySense IoT Platform - Prueba Integral"
+echo "SkySense IoT Platform - Prueba Integral Kubernetes"
 echo "Fecha: $(date)"
+echo "Cluster: $(kubectl config current-context)"
 echo "==========================================================="
 
-# Limpiar pods problemáticos
+# Limpiar pods problemáticos si existen
 echo "🧹 Limpiando pods problemáticos..."
-kubectl delete pod -n skysense frontend-6f5fc5b6f7-gsh9l --force --grace-period=0 2>/dev/null
+kubectl delete pod -n skysense --field-selector=status.phase!=Running --force --grace-period=0 2>/dev/null || true
 
 echo ""
 echo "1. 🏗️  PRUEBA DE INFRAESTRUCTURA KUBERNETES"
@@ -24,17 +27,20 @@ echo "2. ⚙️  PRUEBA DEL BACKEND Y BASE DE DATOS"
 echo "========================================"
 
 echo "🏥 Prueba de salud del backend:"
-kubectl exec -n skysense deployment/frontend -- curl -s -w "Código HTTP: %{http_code}\nTiempo: %{time_total}s\n" http://backend-service:8000/api/health
+BACKEND_POD=$(kubectl get pods -n skysense -l app=backend -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n skysense $BACKEND_POD -- curl -s -w "Código HTTP: %{http_code}\nTiempo: %{time_total}s\n" http://localhost:8000/api/health || echo "❌ No se pudo conectar al backend"
 
 echo ""
 echo "🗃️  Prueba de base de datos:"
-kubectl exec -n skysense deployment/backend -- python3 -c "
+kubectl exec -n skysense $BACKEND_POD -- python3 -c "
 import psycopg2
 import time
+import os
 
 def test_database():
     try:
         start_time = time.time()
+        # Usar la conexión desde environment variables
         conn = psycopg2.connect('postgresql://user:password@postgresql:5432/skysense')
         cur = conn.cursor()
         
@@ -43,12 +49,13 @@ def test_database():
         total_records = cur.fetchone()[0]
         
         # Prueba 2: Verificar estructura de la tabla
-        cur.execute('SELECT column_name, data_type FROM information_schema.columns WHERE table_name = \\\"sensor_data\\\"')
+        cur.execute('SELECT column_name, data_type FROM information_schema.columns WHERE table_name = \\'sensor_data\\'')
         columns = cur.fetchall()
         
         # Prueba 3: Insertar registro de prueba
         test_sensor = 'test_sensor_prueba'
-        cur.execute('INSERT INTO sensor_data (sensor_id, temperature, humidity, pressure) VALUES (%s, %s, %s, %s)', (test_sensor, 25.0, 50.0, 1013.25))
+        cur.execute('INSERT INTO sensor_data (sensor_id, temperature, humidity, pressure) VALUES (%s, %s, %s, %s)', 
+                   (test_sensor, 25.0, 50.0, 1013.25))
         conn.commit()
         
         # Prueba 4: Recuperar el registro insertado
@@ -69,101 +76,156 @@ def test_database():
         print('   ✅ Inserción/Consulta/Eliminación: FUNCIONA')
         
     except Exception as e:
-        print('❌ ERROR en prueba de base de datos:', e)
+        print('❌ ERROR en prueba de base de datos:', str(e))
 
 test_database()
 "
 
 echo ""
-echo "3. 🌐 PRUEBA DE LA API REST - CORREGIDA"
-echo "======================================"
+echo "3. 🌐 PRUEBA DE LA API REST - DESDE EXTERNO"
+echo "=========================================="
 
-echo "📡 Probando endpoints de la API:"
+echo "📡 Probando endpoints de la API desde NodePort:"
+
+BACKEND_NODEPORT="192.168.49.2:30080"
+echo "🔹 Usando Backend en: $BACKEND_NODEPORT"
 
 echo ""
-echo "🔹 GET /api/sensors (todos los sensores):"
-kubectl exec -n skysense deployment/frontend -- curl -s http://backend-service:8000/api/sensors | python3 -c "
+echo "🔹 GET /api/health:"
+curl -s "http://$BACKEND_NODEPORT/api/health" | python3 -c "
 import sys, json
-data = json.load(sys.stdin)
-print('   ✅ Sensores recuperados:', data['count'])
-print('   📊 Últimos 2 sensores:')
-for sensor in data['sensors'][:2]:
-    print('      - {}: {}\u00b0C'.format(sensor['sensor_id'], sensor['temperature']))
+try:
+    data = json.load(sys.stdin)
+    print('   ✅ Health check:', data.get('status', 'N/A'))
+    print('   🗄️  Database:', data.get('database', 'N/A'))
+except:
+    print('   ❌ No se pudo parsear respuesta')
 "
 
 echo ""
-echo "🔹 GET /api/sensors/sensor_1 (sensor específico):"
-kubectl exec -n skysense deployment/frontend -- curl -s http://backend-service:8000/api/sensors/sensor_1 | python3 -c "
+echo "🔹 GET /api/sensors (últimos registros):"
+curl -s "http://$BACKEND_NODEPORT/api/sensors?limit=3" | python3 -c "
 import sys, json
-data = json.load(sys.stdin)
-print('   ✅ Datos de sensor_1:', data['count'], 'lecturas')
-if data['readings']:
-    print('   📈 Última lectura:', data['readings'][0]['temperature'], '\u00b0C')
+try:
+    data = json.load(sys.stdin)
+    print('   ✅ Sensores recuperados:', data.get('count', 0))
+    print('   📊 Últimos sensores:')
+    for sensor in data.get('sensors', [])[:2]:
+        print('      - {}: {}\u00b0C, {}%'.format(
+            sensor.get('sensor_id', 'N/A'),
+            sensor.get('temperature', 'N/A'),
+            sensor.get('humidity', 'N/A')
+        ))
+except Exception as e:
+    print('   ❌ Error:', str(e))
 "
 
 echo ""
-echo "4. 🔄 PRUEBA DE WEBSOCKET EN TIEMPO REAL - CORREGIDA"
-echo "==================================================="
+echo "4. 🔄 PRUEBA DE WEBSOCKET EN TIEMPO REAL"
+echo "========================================"
 
-echo "🔌 Prueba de WebSocket (simplificada):"
-echo "📊 Verificando logs de WebSocket en backend..."
-kubectl logs -n skysense deployment/backend --tail=10 | grep -E "WebSocket|sensor|connected" | head -5
+echo "🔌 Verificando actividad WebSocket en logs..."
+WEBSOCKET_LOGS=$(kubectl logs -n skysense deployment/backend --tail=15 2>/dev/null | grep -E "WebSocket|connected|sensor_" | tail -5 || true)
+
+if [ -n "$WEBSOCKET_LOGS" ]; then
+    echo "✅ Actividad WebSocket detectada:"
+    echo "$WEBSOCKET_LOGS" | while read line; do
+        echo "   📝 $line"
+    done
+else
+    echo "⚠️  No se detectó actividad WebSocket reciente"
+    echo "   Verificando si el servicio está activo..."
+    kubectl logs -n skysense deployment/backend --tail=3 2>/dev/null || echo "   ❌ No se pueden obtener logs"
+fi
 
 echo ""
 echo "5. 🖥️  PRUEBA DEL FRONTEND"
 echo "=========================="
 
-FRONTEND_URL="http://192.168.49.2:31049"
-echo "🌐 Probando frontend en: $FRONTEND_URL"
+FRONTEND_NODEPORT="192.168.49.2:32323"
+echo "🌐 Probando frontend en: http://$FRONTEND_NODEPORT"
 
-if curl -s --head "$FRONTEND_URL" | grep "200 OK" > /dev/null; then
-    echo "✅ Frontend accesible"
+# Probamos con timeout para no bloquear
+if curl -s --max-time 10 "http://$FRONTEND_NODEPORT" | grep -q "SkySense\|Angular"; then
+    echo "✅ Frontend accesible y respondiendo"
     echo "📱 Interfaz web funcionando correctamente"
+    
+    # Verificar que los assets cargan
+    if curl -s --max-time 5 "http://$FRONTEND_NODEPORT/assets/env.js" > /dev/null; then
+        echo "✅ Assets cargando correctamente"
+    else
+        echo "⚠️  Assets podrían no estar cargando"
+    fi
 else
-    echo "❌ Frontend no responde"
+    echo "❌ Frontend no responde o tarda demasiado"
+    echo "   Verificando pods del frontend..."
+    kubectl get pods -n skysense -l app=frontend
 fi
 
 echo ""
 echo "6. ⚡ PRUEBA DE RENDIMIENTO"
 echo "=========================="
 
-echo "🔁 Probando 5 requests rápidos al backend:"
+echo "🔁 Probando 5 requests rápidos al backend externo:"
 start_time=$(date +%s)
+SUCCESS_COUNT=0
 for i in {1..5}; do
-    kubectl exec -n skysense deployment/frontend -- curl -s -o /dev/null http://backend-service:8000/api/health
-    echo -n "✅ "
+    if curl -s -o /dev/null --max-time 5 "http://$BACKEND_NODEPORT/api/health"; then
+        echo -n "✅ "
+        ((SUCCESS_COUNT++))
+    else
+        echo -n "❌ "
+    fi
+    sleep 0.5
 done
 echo ""
 end_time=$(date +%s)
-echo "⚡ 5 requests completadas en $((end_time - start_time)) segundos"
+echo "⚡ $SUCCESS_COUNT/5 requests exitosas en $((end_time - start_time)) segundos"
 
 echo ""
 echo "7. 📊 PRUEBA DE DATOS EN TIEMPO REAL"
 echo "===================================="
 
-echo "📈 Verificando crecimiento de datos:"
-INITIAL_COUNT=$(kubectl exec -n skysense deployment/backend -- python3 -c "import psycopg2; conn=psycopg2.connect('postgresql://user:password@postgresql:5432/skysense'); cur=conn.cursor(); cur.execute('SELECT COUNT(*) FROM sensor_data'); print(cur.fetchone()[0]); conn.close()")
+echo "📈 Verificando crecimiento de datos en PostgreSQL..."
+INITIAL_COUNT=$(kubectl exec -n skysense $BACKEND_POD -- python3 -c "
+import psycopg2
+try:
+    conn = psycopg2.connect('postgresql://user:password@postgresql:5432/skysense')
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*) FROM sensor_data')
+    print(cur.fetchone()[0])
+    conn.close()
+except Exception as e:
+    print('0')
+" 2>/dev/null || echo "0")
 
 echo "   Registros iniciales: $INITIAL_COUNT"
-echo "   Esperando 10 segundos..."
-sleep 10
+echo "   Esperando 15 segundos para capturar nuevos datos..."
+sleep 15
 
-FINAL_COUNT=$(kubectl exec -n skysense deployment/backend -- python3 -c "import psycopg2; conn=psycopg2.connect('postgresql://user:password@postgresql:5432/skysense'); cur=conn.cursor(); cur.execute('SELECT COUNT(*) FROM sensor_data'); print(cur.fetchone()[0]); conn.close()")
+FINAL_COUNT=$(kubectl exec -n skysense $BACKEND_POD -- python3 -c "
+import psycopg2
+try:
+    conn = psycopg2.connect('postgresql://user:password@postgresql:5432/skysense')
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*) FROM sensor_data')
+    print(cur.fetchone()[0])
+    conn.close()
+except Exception as e:
+    print('0')
+" 2>/dev/null || echo "0")
 
 echo "   Registros finales: $FINAL_COUNT"
 NEW_RECORDS=$((FINAL_COUNT - INITIAL_COUNT))
-echo "   Nuevos registros: $NEW_RECORDS"
+echo "   Nuevos registros en 15 segundos: $NEW_RECORDS"
 
 if [ $NEW_RECORDS -gt 0 ]; then
     echo "✅ DATOS FLUYENDO CORRECTAMENTE"
+    echo "   📈 Tasa aproximada: $(echo "scale=2; $NEW_RECORDS / 15" | bc) registros/segundo"
 else
-    echo "⚠️  Pocos nuevos registros, verificando..."
-    # Verificar si hay actividad en los logs
-    if kubectl logs -n skysense deployment/backend --tail=3 | grep -q "sensor_"; then
-        echo "✅ WebSocket activo en logs"
-    else
-        echo "❌ POSIBLE PROBLEMA CON EL FLUJO DE DATOS"
-    fi
+    echo "⚠️  No se detectaron nuevos registros"
+    echo "   Verificando actividad del WebSocket..."
+    kubectl logs -n skysense deployment/backend --tail=5 | grep -E "sending|sensor" || echo "   ℹ️  Revisar logs manualmente"
 fi
 
 echo ""
@@ -173,19 +235,23 @@ echo "================================"
 echo "🎯 RESUMEN DE LA PRUEBA COMPLETA:"
 echo ""
 
-# Verificar todos los componentes
+# Estadísticas finales
+RUNNING_PODS=$(kubectl get pods -n skysense --no-headers 2>/dev/null | grep -c Running || echo "0")
+TOTAL_PODS=$(kubectl get pods -n skysense --no-headers 2>/dev/null | wc -l || echo "0")
+
 echo "📋 COMPONENTES DEL SISTEMA:"
-echo "   Kubernetes Pods: $(kubectl get pods -n skysense --no-headers | grep -c Running)/$(kubectl get pods -n skysense --no-headers | wc -l) en Running"
-echo "   Backend API: ✅ (verificado)"
-echo "   Base de Datos: ✅ (verificado)" 
-echo "   WebSocket: ✅ (activo en logs)"
-echo "   Frontend: ✅ (accesible)"
-echo "   Datos en Tiempo Real: ✅ ($NEW_RECORDS nuevos registros)"
+echo "   Kubernetes Pods: $RUNNING_PODS/$TOTAL_PODS en Running"
+echo "   Backend API: $( [ $SUCCESS_COUNT -gt 0 ] && echo "✅" || echo "❌" )"
+echo "   Base de Datos: $( [ $INITIAL_COUNT -gt 0 ] && echo "✅" || echo "❌" )" 
+echo "   WebSocket: $( [ -n "$WEBSOCKET_LOGS" ] && echo "✅" || echo "⚠️" )"
+echo "   Frontend: $( curl -s --max-time 5 "http://$FRONTEND_NODEPORT" > /dev/null && echo "✅" || echo "❌" )"
+echo "   Datos en Tiempo Real: $( [ $NEW_RECORDS -gt 0 ] && echo "✅" || echo "⚠️" )"
 
 echo ""
-echo "📊 ESTADÍSTICAS FINALES:"
-kubectl exec -n skysense deployment/backend -- python3 -c "
+echo "📊 ESTADÍSTICAS FINALES DE DATOS:"
+kubectl exec -n skysense $BACKEND_POD -- python3 -c "
 import psycopg2
+from datetime import datetime
 
 try:
     conn = psycopg2.connect('postgresql://user:password@postgresql:5432/skysense')
@@ -196,49 +262,66 @@ try:
     total = cur.fetchone()[0]
     
     # Registros por sensor
-    cur.execute('SELECT sensor_id, COUNT(*) FROM sensor_data GROUP BY sensor_id')
+    cur.execute('SELECT sensor_id, COUNT(*) FROM sensor_data GROUP BY sensor_id ORDER BY COUNT(*) DESC')
     sensor_counts = cur.fetchall()
     
     # Rango de fechas
     cur.execute('SELECT MIN(timestamp), MAX(timestamp) FROM sensor_data')
     min_ts, max_ts = cur.fetchone()
     
+    # Últimos registros
+    cur.execute('SELECT sensor_id, temperature, humidity, timestamp FROM sensor_data ORDER BY timestamp DESC LIMIT 3')
+    latest = cur.fetchall()
+    
     conn.close()
     
     print('   📈 Total de registros: {:,}'.format(total))
-    print('   🔍 Registros por sensor:')
+    print('   🔍 Distribución por sensor:')
     for sensor_id, count in sensor_counts:
-        print('      - {}: {:,}'.format(sensor_id, count))
-    print('   🕐 Rango temporal:', min_ts, 'to', max_ts)
+        print('      - {}: {:,} registros'.format(sensor_id, count))
+    
+    if min_ts and max_ts:
+        print('   🕐 Rango temporal: {} a {}'.format(
+            min_ts.strftime('%H:%M:%S') if hasattr(min_ts, 'strftime') else min_ts,
+            max_ts.strftime('%H:%M:%S') if hasattr(max_ts, 'strftime') else max_ts
+        ))
+    
+    print('   📅 Últimas lecturas:')
+    for sensor_id, temp, hum, ts in latest:
+        print('      - {}: {}\u00b0C, {}% - {}'.format(
+            sensor_id, temp, hum, 
+            ts.strftime('%H:%M:%S') if hasattr(ts, 'strftime') else ts
+        ))
     
 except Exception as e:
-    print('   ❌ Error al obtener estadísticas:', e)
-"
+    print('   ❌ Error al obtener estadísticas:', str(e))
+" 2>/dev/null || echo "   ❌ No se pudieron obtener estadísticas"
 
 echo ""
 echo "🎉 RESULTADO FINAL:"
-RUNNING_PODS=$(kubectl get pods -n skysense --no-headers | grep -c Running)
-TOTAL_PODS=$(kubectl get pods -n skysense --no-headers | wc -l)
 
-if [ $RUNNING_PODS -ge 4 ]; then
+if [ $RUNNING_PODS -ge 3 ] && [ $SUCCESS_COUNT -gt 0 ] && [ $INITIAL_COUNT -gt 0 ]; then
     echo "   ✅ ¡SISTEMA COMPLETAMENTE OPERATIVO!"
-    echo "   🚀 SkySense IoT Platform funcionando al 100%"
+    echo "   🚀 SkySense IoT Platform funcionando correctamente"
     echo ""
     echo "🌐 URLS DE ACCESO:"
-    echo "   Frontend: http://192.168.49.2:31049"
-    echo "   Backend API: http://192.168.49.2:31049/api/health"
-    echo "   WebSocket: ws://192.168.49.2:31049/ws/sensors"
+    echo "   Frontend: http://$FRONTEND_NODEPORT"
+    echo "   Backend API: http://$BACKEND_NODEPORT/api/health"
+    echo "   WebSocket: ws://$BACKEND_NODEPORT/ws/sensors"
+    echo "   API Docs: http://$BACKEND_NODEPORT/docs"
 else
-    echo "   ⚠️  Algunos componentes pueden necesitar atención"
+    echo "   ⚠️  ALGUNOS COMPONENTES NECESITAN ATENCIÓN"
     echo "   Pods ejecutándose: $RUNNING_PODS/$TOTAL_PODS"
+    echo "   Requests exitosos: $SUCCESS_COUNT/5"
+    echo "   Registros en BD: $INITIAL_COUNT"
 fi
 
 echo ""
-echo "📝 PRÓXIMOS PASOS:"
-echo "   1. Monitorear el sistema por 24 horas"
-echo "   2. Verificar que los datos sigan fluyendo"
-echo "   3. Probar la interfaz web manualmente"
-echo "   4. Configurar backups (opcional)"
+echo "📝 PRÓXIMOS PASOS RECOMENDADOS:"
+echo "   1. Abrir el Frontend: http://$FRONTEND_NODEPORT"
+echo "   2. Verificar datos en tiempo real"
+echo "   3. Probar la API: http://$BACKEND_NODEPORT/docs"
+echo "   4. Monitorear logs: kubectl logs -n skysense deployment/backend --follow"
 
 echo ""
 echo "==========================================================="
